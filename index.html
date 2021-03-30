@@ -1,0 +1,41 @@
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1">
+	<link rel="stylesheet" href="https://unpkg.com/purecss@2.0.5/build/pure-min.css" crossorigin="anonymous">
+	<title>QRCode Reader</title>
+	<style>
+		#video-container {
+			margin: 0 auto;
+			position: relative;
+			width: 100%;
+			height: 100px;
+		}
+		canvas, video {
+			width: auto;
+			height: 100px;
+			position: absolute;
+			top: 0;
+			left: 0;
+		}
+		#canvas-overlay {
+			z-index: 10;
+		}
+		.container {
+			width: 100%;
+		}
+	</style>
+</head>
+<body>
+	<div id='video-container'>
+		<canvas id='canvas' hidden></canvas>
+		<canvas id='canvas-overlay'></canvas>
+		<video id='video'></video>
+	</div>
+	<button class="pure-button" onclick="onstart()">Start</button>
+	<button class="pure-button" onclick="onstop()">Stop</button>
+	<table id='textareatable' class="container pure-table"></table>
+	<script src="./js/jsQR-1.3.1.js"></script>
+	<script src='./js/main.js'></script>
+</body>
+</html>
