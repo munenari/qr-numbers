@@ -9,8 +9,9 @@ var onstart
 	var canvasOverlayElement = document.getElementById( 'canvas-overlay' )
 	var canvas = canvasElement.getContext( '2d' )
 	var canvasOverlay = canvasOverlayElement.getContext( '2d' )
-	var isPausing = false
 	var results = {}
+	var qrOptions = { inversionAttempts: 'dontInvert' }
+	var requestId
 
 	function strokeStart () {
 		canvasOverlay.beginPath()
@@ -34,7 +35,7 @@ var onstart
 			video.srcObject = stream
 			video.setAttribute( 'playsinline', true ) // required to tell iOS safari we don't want fullscreen
 			video.play()
-			requestAnimationFrame( tick )
+			requestId = requestAnimationFrame( tick )
 		} )
 	}
 
@@ -74,13 +75,8 @@ var onstart
 			canvasOverlayElement.height = video.videoHeight
 			canvasOverlayElement.width = video.videoWidth
 			canvas.drawImage( video, 0, 0, canvasElement.width, canvasElement.height )
-			if ( isPausing === true ) {
-				return requestAnimationFrame( tick )
-			}
 			var imageData = canvas.getImageData( 0, 0, canvasElement.width, canvasElement.height )
-			var code = jsQR( imageData.data, imageData.width, imageData.height, {
-				inversionAttempts: 'dontInvert',
-			} )
+			var code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
 			if ( code && code.data != '' ) {
 				strokeStart()
 				drawLine( code.location.topLeftCorner, code.location.topRightCorner )
@@ -91,12 +87,14 @@ var onstart
 				callback( code )
 			}
 		}
-		requestAnimationFrame( tick )
+		cancelAnimationFrame( requestId )
+		requestId = requestAnimationFrame( tick )
 	}
 
 	onstop = () => {
 		video.srcObject.getTracks().forEach( s => s.stop() )
 		video.srcObject = null
+		cancelAnimationFrame( requestId )
 	}
 	onstart = () => play()
 
