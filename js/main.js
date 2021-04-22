@@ -76,7 +76,12 @@ var onstart
 			canvasOverlayElement.width = video.videoWidth
 			canvas.drawImage( video, 0, 0, canvasElement.width, canvasElement.height )
 			var imageData = canvas.getImageData( 0, 0, canvasElement.width, canvasElement.height )
-			var code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
+			var code
+			try {
+				code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
+			} catch ( e ) {
+				console.error( 'failed to find QR:', e )
+			}
 			if ( code && code.data != '' ) {
 				strokeStart()
 				drawLine( code.location.topLeftCorner, code.location.topRightCorner )
