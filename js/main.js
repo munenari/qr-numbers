@@ -20,7 +20,7 @@ var onstart
 		canvasOverlay.moveTo( begin.x, begin.y )
 		canvasOverlay.lineTo( end.x, end.y )
 	}
-	function strokeEnd ( width = 4, color = '#33ff77' ) {
+	function strokeEnd ( width = 8, color = '#33ff77' ) {
 		canvasOverlay.lineWidth = width
 		canvasOverlay.strokeStyle = color
 		canvasOverlay.stroke()
@@ -68,6 +68,33 @@ var onstart
 		table.appendChild( tbody )
 	}
 
+	function getResult ( imageData, ox, oy ) {
+		var code
+		try {
+			code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
+		} catch ( e ) {
+			console.error( 'failed to find QR:', e )
+		}
+		if ( code && code.data != '' ) {
+			code.location.topLeftCorner.x += ox
+			code.location.topLeftCorner.y += oy
+			code.location.topRightCorner.x += ox
+			code.location.topRightCorner.y += oy
+			code.location.bottomRightCorner.x += ox
+			code.location.bottomRightCorner.y += oy
+			code.location.bottomLeftCorner.x += ox
+			code.location.bottomLeftCorner.y += oy
+			drawLine( code.location.topLeftCorner, code.location.topRightCorner )
+			drawLine( code.location.topRightCorner, code.location.bottomRightCorner )
+			drawLine( code.location.bottomRightCorner, code.location.bottomLeftCorner )
+			drawLine( code.location.bottomLeftCorner, code.location.topLeftCorner )
+			callback( code )
+		}
+		return code
+	}
+	function getResultWithCrop ( canvas, ox, oy, width, height ) {
+		return getResult( canvas.getImageData( ox, oy, width, height ), ox, oy )
+	}
 	function tick () {
 		if ( video.readyState === video.HAVE_ENOUGH_DATA ) {
 			canvasElement.height = video.videoHeight
@@ -75,22 +102,24 @@ var onstart
 			canvasOverlayElement.height = video.videoHeight
 			canvasOverlayElement.width = video.videoWidth
 			canvas.drawImage( video, 0, 0, canvasElement.width, canvasElement.height )
-			var imageData = canvas.getImageData( 0, 0, canvasElement.width, canvasElement.height )
-			var code
-			try {
-				code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
-			} catch ( e ) {
-				console.error( 'failed to find QR:', e )
-			}
-			if ( code && code.data != '' ) {
-				strokeStart()
-				drawLine( code.location.topLeftCorner, code.location.topRightCorner )
-				drawLine( code.location.topRightCorner, code.location.bottomRightCorner )
-				drawLine( code.location.bottomRightCorner, code.location.bottomLeftCorner )
-				drawLine( code.location.bottomLeftCorner, code.location.topLeftCorner )
-				strokeEnd()
-				callback( code )
-			}
+
+			var w = canvasElement.width
+			var h = canvasElement.height
+			var w2 = w / 2
+			var h2 = h / 2
+			strokeStart()
+			getResultWithCrop( canvas, 0, 0, w, h ) // 1/1
+			//
+			getResultWithCrop( canvas, 0, 0, w, h2 ) // 1/2
+			getResultWithCrop( canvas, 0, h2, w, h2 ) // 1/2
+			getResultWithCrop( canvas, 0, 0, w2, h ) // 1/2
+			getResultWithCrop( canvas, w2, 0, w2, h ) // 1/2
+			//
+			getResultWithCrop( canvas, 0, 0, w2, h2 ) // 1/4
+			getResultWithCrop( canvas, w2, 0, w2, h2 ) // 1/4
+			getResultWithCrop( canvas, 0, h2, w2, h2 ) // 1/4
+			getResultWithCrop( canvas, w2, h2, w2, h2 ) // 1/4
+			strokeEnd()
 		}
 		cancelAnimationFrame( requestId )
 		requestId = requestAnimationFrame( tick )
