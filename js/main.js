@@ -13,6 +13,11 @@ var onstart
 	var qrOptions = { inversionAttempts: 'dontInvert' }
 	var requestId
 
+	function log ( ...args ) {
+		return
+		console.log( ...args )
+	}
+
 	function strokeStart () {
 		canvasOverlay.beginPath()
 	}
@@ -68,33 +73,86 @@ var onstart
 		table.appendChild( tbody )
 	}
 
-	function getResult ( imageData, ox, oy ) {
-		var code
-		try {
-			code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
-		} catch ( e ) {
-			console.error( 'failed to find QR:', e )
-		}
-		if ( code && code.data != '' ) {
-			code.location.topLeftCorner.x += ox
-			code.location.topLeftCorner.y += oy
-			code.location.topRightCorner.x += ox
-			code.location.topRightCorner.y += oy
-			code.location.bottomRightCorner.x += ox
-			code.location.bottomRightCorner.y += oy
-			code.location.bottomLeftCorner.x += ox
-			code.location.bottomLeftCorner.y += oy
-			drawLine( code.location.topLeftCorner, code.location.topRightCorner )
-			drawLine( code.location.topRightCorner, code.location.bottomRightCorner )
-			drawLine( code.location.bottomRightCorner, code.location.bottomLeftCorner )
-			drawLine( code.location.bottomLeftCorner, code.location.topLeftCorner )
-			callback( code )
-		}
-		return code
+	let drawPoints = []
+	function drawAndCallback ( code ) {
+		callback( code )
+		code.location.topLeftCorner.x += code.offsetX
+		code.location.topLeftCorner.y += code.offsetY
+		code.location.topRightCorner.x += code.offsetX
+		code.location.topRightCorner.y += code.offsetY
+		code.location.bottomRightCorner.x += code.offsetX
+		code.location.bottomRightCorner.y += code.offsetY
+		code.location.bottomLeftCorner.x += code.offsetX
+		code.location.bottomLeftCorner.y += code.offsetY
+		// tl, tr, br, bl
+		drawPoints.push( [ code.location.topLeftCorner, code.location.topRightCorner, code.location.bottomRightCorner, code.location.bottomLeftCorner ] )
 	}
-	function getResultWithCrop ( canvas, ox, oy, width, height ) {
-		return getResult( canvas.getImageData( ox, oy, width, height ), ox, oy )
+
+	function getSelfWorker () {
+		const w = {}
+		w.postMessage = data => {
+			if ( !data ) return
+			const { imageData, qrOptions, offsetX, offsetY } = data
+			try {
+				const code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
+				w.isBusy = false
+				if ( code && code.data != '' ) {
+					code.offsetX = offsetX
+					code.offsetY = offsetY
+					log( 'self:', code )
+					drawAndCallback( code )
+				}
+			} catch ( e ) {
+				console.error( 'failed to find QR:', e )
+			}
+		}
+		return w
 	}
+
+	const workers = []
+	const workerNum = 4
+	for ( let i = 0; i < workerNum; i++ ) {
+		if ( i == 0 ) {
+			workers.push( getSelfWorker() )
+			continue
+		}
+		const w = new Worker( location.pathname + 'js/decode-qr.worker.js?r=1w=' + i )
+		w.onmessage = function ( e ) {
+			this.isBusy = false
+			const code = e.data
+			if ( code && code.data ) {
+				log( 'worker:', code )
+				drawAndCallback( code )
+			}
+		}
+		workers.push( w )
+	}
+
+	let i = 0
+	function getResultWithCrop ( canvas, ox, oy, width, height, next ) {
+		const w = workers[ i++ % workerNum ]
+		if ( w.isBusy ) return next || getResultWithCrop( canvas, ox, oy, width, height, true )
+		w.isBusy = true
+		w.postMessage( {
+			imageData: canvas.getImageData( ox, oy, width, height ),
+			qrOptions: qrOptions,
+			offsetX: ox,
+			offsetY: oy
+		} )
+	}
+
+	function drawBulk () {
+		strokeStart()
+		drawPoints.forEach( rect => {
+			drawLine( rect[ 0 ], rect[ 1 ] )
+			drawLine( rect[ 1 ], rect[ 2 ] )
+			drawLine( rect[ 2 ], rect[ 3 ] )
+			drawLine( rect[ 3 ], rect[ 0 ] )
+		} )
+		strokeEnd()
+		drawPoints = []
+	}
+
 	function tick () {
 		if ( video.readyState === video.HAVE_ENOUGH_DATA ) {
 			canvasElement.height = video.videoHeight
@@ -102,12 +160,12 @@ var onstart
 			canvasOverlayElement.height = video.videoHeight
 			canvasOverlayElement.width = video.videoWidth
 			canvas.drawImage( video, 0, 0, canvasElement.width, canvasElement.height )
+			drawBulk()
 
 			var w = canvasElement.width
 			var h = canvasElement.height
 			var w2 = w / 2
 			var h2 = h / 2
-			strokeStart()
 			getResultWithCrop( canvas, 0, 0, w, h ) // 1/1
 			//
 			getResultWithCrop( canvas, 0, 0, w, h2 ) // 1/2
@@ -119,7 +177,6 @@ var onstart
 			getResultWithCrop( canvas, w2, 0, w2, h2 ) // 1/4
 			getResultWithCrop( canvas, 0, h2, w2, h2 ) // 1/4
 			getResultWithCrop( canvas, w2, h2, w2, h2 ) // 1/4
-			strokeEnd()
 		}
 		cancelAnimationFrame( requestId )
 		requestId = requestAnimationFrame( tick )
