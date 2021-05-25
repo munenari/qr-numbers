@@ -68,33 +68,84 @@ var onstart
 		table.appendChild( tbody )
 	}
 
-	function getResult ( imageData, ox, oy ) {
-		var code
-		try {
-			code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
-		} catch ( e ) {
-			console.error( 'failed to find QR:', e )
+	function getSelfWorker () {
+		return {
+			postMessage: data => {
+				if ( !data ) {
+					return
+				}
+				const { imageData, qrOptions, offsetX, offsetY } = data
+				try {
+					const code = jsQR( imageData.data, imageData.width, imageData.height, qrOptions )
+					if ( code && code.data != '' ) {
+						code.offsetX = offsetX
+						code.offsetY = offsetY
+						code.location.topLeftCorner.x += code.offsetX
+						code.location.topLeftCorner.y += code.offsetY
+						code.location.topRightCorner.x += code.offsetX
+						code.location.topRightCorner.y += code.offsetY
+						code.location.bottomRightCorner.x += code.offsetX
+						code.location.bottomRightCorner.y += code.offsetY
+						code.location.bottomLeftCorner.x += code.offsetX
+						code.location.bottomLeftCorner.y += code.offsetY
+						strokeStart()
+						drawLine( code.location.topLeftCorner, code.location.topRightCorner )
+						drawLine( code.location.topRightCorner, code.location.bottomRightCorner )
+						drawLine( code.location.bottomRightCorner, code.location.bottomLeftCorner )
+						drawLine( code.location.bottomLeftCorner, code.location.topLeftCorner )
+						strokeEnd()
+						callback( code )
+						console.log( 'self:', code )
+					}
+				} catch ( e ) {
+					console.error( 'failed to find QR:', e )
+				}
+			}
 		}
-		if ( code && code.data != '' ) {
-			code.location.topLeftCorner.x += ox
-			code.location.topLeftCorner.y += oy
-			code.location.topRightCorner.x += ox
-			code.location.topRightCorner.y += oy
-			code.location.bottomRightCorner.x += ox
-			code.location.bottomRightCorner.y += oy
-			code.location.bottomLeftCorner.x += ox
-			code.location.bottomLeftCorner.y += oy
+	}
+
+	const workers = []
+	const workerNum = 4
+	for ( let i = 0; i < workerNum; i++ ) {
+		if ( i < 1 ) {
+			workers.push( getSelfWorker() )
+			continue
+		}
+		const w = new Worker( location.pathname + 'js/decode-qr.worker.js?r=1w=' + i )
+		w.onmessage = e => {
+			const code = e.data
+			console.log( 'worker:', e.data )
+			callback( e.data )
+			code.location.topLeftCorner.x += code.offsetX
+			code.location.topLeftCorner.y += code.offsetY
+			code.location.topRightCorner.x += code.offsetX
+			code.location.topRightCorner.y += code.offsetY
+			code.location.bottomRightCorner.x += code.offsetX
+			code.location.bottomRightCorner.y += code.offsetY
+			code.location.bottomLeftCorner.x += code.offsetX
+			code.location.bottomLeftCorner.y += code.offsetY
+			strokeStart()
 			drawLine( code.location.topLeftCorner, code.location.topRightCorner )
 			drawLine( code.location.topRightCorner, code.location.bottomRightCorner )
 			drawLine( code.location.bottomRightCorner, code.location.bottomLeftCorner )
 			drawLine( code.location.bottomLeftCorner, code.location.topLeftCorner )
-			callback( code )
+			strokeEnd()
 		}
-		return code
+		workers.push( w )
 	}
+
+	let i = 0
 	function getResultWithCrop ( canvas, ox, oy, width, height ) {
-		return getResult( canvas.getImageData( ox, oy, width, height ), ox, oy )
+		const d = canvas.getImageData( ox, oy, width, height )
+		const w = workers[ i++ % workerNum ]
+		w.postMessage( {
+			imageData: d,
+			qrOptions: qrOptions,
+			offsetX: ox,
+			offsetY: oy
+		} )
 	}
+
 	function tick () {
 		if ( video.readyState === video.HAVE_ENOUGH_DATA ) {
 			canvasElement.height = video.videoHeight
@@ -107,19 +158,19 @@ var onstart
 			var h = canvasElement.height
 			var w2 = w / 2
 			var h2 = h / 2
-			strokeStart()
+			// strokeStart()
 			getResultWithCrop( canvas, 0, 0, w, h ) // 1/1
 			//
-			getResultWithCrop( canvas, 0, 0, w, h2 ) // 1/2
-			getResultWithCrop( canvas, 0, h2, w, h2 ) // 1/2
-			getResultWithCrop( canvas, 0, 0, w2, h ) // 1/2
-			getResultWithCrop( canvas, w2, 0, w2, h ) // 1/2
+			// getResultWithCrop( canvas, 0, 0, w, h2 ) // 1/2
+			// getResultWithCrop( canvas, 0, h2, w, h2 ) // 1/2
+			// getResultWithCrop( canvas, 0, 0, w2, h ) // 1/2
+			// getResultWithCrop( canvas, w2, 0, w2, h ) // 1/2
 			//
-			getResultWithCrop( canvas, 0, 0, w2, h2 ) // 1/4
-			getResultWithCrop( canvas, w2, 0, w2, h2 ) // 1/4
-			getResultWithCrop( canvas, 0, h2, w2, h2 ) // 1/4
-			getResultWithCrop( canvas, w2, h2, w2, h2 ) // 1/4
-			strokeEnd()
+			// getResultWithCrop( canvas, 0, 0, w2, h2 ) // 1/4
+			// getResultWithCrop( canvas, w2, 0, w2, h2 ) // 1/4
+			// getResultWithCrop( canvas, 0, h2, w2, h2 ) // 1/4
+			// getResultWithCrop( canvas, w2, h2, w2, h2 ) // 1/4
+			// strokeEnd()
 		}
 		cancelAnimationFrame( requestId )
 		requestId = requestAnimationFrame( tick )
